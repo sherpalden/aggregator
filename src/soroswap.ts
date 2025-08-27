@@ -157,8 +157,6 @@ export async function getSoroswapQuotesForAllPoints(
     tokenPair: TokenPair, 
     allPoints: number[]
 ): Promise<QuoteDataPoint[]> {
-    console.log(`Getting quotes for ${allPoints.length} points simultaneously...`);
-    
     // Create all quote requests
     const quoteRequests = allPoints.map(amount => ({
         assetIn: tokenPair.tokenA,
@@ -214,8 +212,8 @@ export async function getSoroswapQuotesForAllPoints(
     
     // Sort by amount in ascending order
     const sortedQuoteDataPoints = quoteDataPoints.sort((a, b) => a.amount - b.amount);
-    
-    console.log(`Successfully got quotes for ${sortedQuoteDataPoints.length}/${allPoints.length} points`);
+
+    console.log(`Got quotes for ${sortedQuoteDataPoints.length} points`);
     
     return sortedQuoteDataPoints;
 }
@@ -376,17 +374,32 @@ async function testAggregatorConsistency(
     return results;
 }
 
-export async function runSoroswap() {
-    const tokenPairs = await getSoroswapTokenPairs("soroswap");
-    const maxAmount = 10000000*250000;
-    const numberOfDataPoints = 36;
-    const testPointOffsetPercentage = 50;
-    // if (tokenPairs.length > 0) {
-    //     const points = generatePointsForAnalysis(10000000*25000, 2, 15);
-    //     await testAggregatorConsistency(tokenPairs[0]!, points.allPoints, 10, 3); // 10s intervals, 3 iterations
-    // }
-    
-    // Uncomment to test point generation and quotes
+interface SoroswapPool {
+    tokenA: string;
+    tokenB: string;
+    reserveA: string;
+    reserveB: string;
+    ledger?: number;
+    protocol: string;
+}
+
+/**
+ * Returns Soroswap pools sorted by liquidity from highest to lowest.
+ * Liquidity score is approximated by product of reserves (reserveA * reserveB).
+ */
+export async function getSoroswapPoolsSortedByLiquidity(): Promise<SoroswapPool[]> {
+    const fs = await import('fs/promises');
+    const pools: SoroswapPool[] = JSON.parse(await fs.readFile('./src/pools.json', 'utf-8'));
+    const filteredPools = pools.filter((pool: SoroswapPool) => pool.protocol === "soroswap");
+
+    const sorted = filteredPools.slice().sort((a, b) => {
+        const liqA = BigInt(a.reserveA) * BigInt(a.reserveB);
+        const liqB = BigInt(b.reserveA) * BigInt(b.reserveB);
+        if (liqA === liqB) return 0;
+        return liqA > liqB ? -1 : 1; // descending
+    });
+
+    return sorted;
 }
 
 

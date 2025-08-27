@@ -39,6 +39,16 @@ Based on these cached quotes, determine the quote for the amount requested by th
 | CETUS-USDC | 1 CETUS    | 40K CETUS  | 6           | 80          | 63.75%          |
 | CETUS-USDC | 1 CETUS    | 80K CETUS  | 6           | 80          | 57.50%          |
 | CETUS-USDC | 1 CETUS    | 160K CETUS | 6           | 80          | 51.25%          |
+| XLM-USDC   | 10M XLM    | 100M XLM   | 6 Linear    | 80          | 86.25%          |
+| XLM-USDC   | 10M XLM    | 200M XLM   | 6 Linear    | 80          | 83.75%          |
+| XLM-USDC   | 10M XLM    | 400M XLM   | 6 Linear    | 80          | 83.75%          |
+| XLM-USDC   | 10M XLM    | 800M XLM   | 6 Linear    | 80          | 76.25%          |
+| XLM-USDC   | 10M XLM    | 1.6B XLM   | 6 Linear    | 80          | 57.50%          |
+| XLM-USDC   | 10M XLM    | 100M XLM   | 6 Log       | 80          | 80.00%          |
+| XLM-USDC   | 10M XLM    | 200M XLM   | 6 Log       | 80          | 76.25%          |
+| XLM-USDC   | 10M XLM    | 400M XLM   | 6 Log       | 80          | 60.00%          |
+| XLM-USDC   | 10M XLM    | 800M XLM   | 6 Log       | 80          | 55.00%          |
+| XLM-USDC   | 10M XLM    | 1.6B XLM   | 6 Log       | 80          | 50.00%          |
 
 **Notes:**
 

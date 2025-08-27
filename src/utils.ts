@@ -24,14 +24,14 @@ export function generatePointsForAnalysis(
     testPoints: number[];
     allPoints: number[];
 } {
-    const dataPoints: number[] = generateLogarithmicDataPoints(minAmount, maxAmount, numberOfDataPoints);
+    const dataPoints: number[] = generateLinearDataPoints(minAmount, maxAmount, numberOfDataPoints);
     const allPoints: number[] = [...dataPoints]; // Create a copy, not a reference
     const testPoints: number[] = [];
 
     for (const testPointOffsetPercentage of testPointOffsetPercentages) {
         for (let i = 0; i < dataPoints.length - 1; i++) {
             const intAmt = dataPoints[i+1]!- dataPoints[i]!
-            const testPoint = dataPoints[i]! + (intAmt * testPointOffsetPercentage) / 100;
+            const testPoint = Math.round(dataPoints[i]! + (intAmt * testPointOffsetPercentage) / 100);
 
             if (!dataPoints.includes(testPoint)) {
                 testPoints.push(testPoint);
@@ -82,6 +82,40 @@ export function generateLogarithmicDataPoints(
     
     for (let i = 0; i < numberOfDataPoints; i++) {
         const dataPoint = minAmount * Math.pow(growthFactor, i);
+        dataPoints.push(Math.round(dataPoint)); // Round to avoid floating point precision issues
+    }
+    
+    return dataPoints;
+}
+
+/**
+ * Generates linear data points with equal intervals for interpolation analysis
+ * 
+ * @param minAmount - Minimum amount to test
+ * @param maxAmount - Maximum amount to test
+ * @param numberOfDataPoints - Number of data points to generate
+ * @returns Array of linearly spaced data points
+ */
+export function generateLinearDataPoints(
+    minAmount: number,
+    maxAmount: number,
+    numberOfDataPoints: number
+): number[] {
+    if (minAmount >= maxAmount) {
+        throw new Error("Invalid parameters: minAmount must be less than maxAmount");
+    }
+    
+    if (numberOfDataPoints < 2) {
+        throw new Error("numberOfDataPoints must be at least 2");
+    }
+    
+    const dataPoints: number[] = [];
+    
+    // Use linear spacing: equal intervals between minAmount and maxAmount
+    const interval = (maxAmount - minAmount) / (numberOfDataPoints - 1);
+    
+    for (let i = 0; i < numberOfDataPoints; i++) {
+        const dataPoint = minAmount + (interval * i);
         dataPoints.push(Math.round(dataPoint)); // Round to avoid floating point precision issues
     }
     

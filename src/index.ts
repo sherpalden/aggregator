@@ -1,7 +1,7 @@
 import { getQuotesForAllPoints } from "./cetus.js";
-import { cetusTokenPairs } from "./config.js";
+import { cetusTokenPairs, soroswapTokenPairs } from "./config.js";
 import { interpolateMultiple, linearInterpolate } from "./interpolation.js";
-import { getSoroswapTokenPairs, getSoroswapQuotesForAllPoints } from "./soroswap.js";
+import { getSoroswapTokenPairs, getSoroswapQuotesForAllPoints, getSoroswapPoolsSortedByLiquidity } from "./soroswap.js";
 import type { QuoteDataPoint, TokenPair } from "./types.js";
 import { delay, generateLogarithmicDataPoints, generatePointsForAnalysis } from "./utils.js";
 
@@ -99,6 +99,48 @@ async function testCetus(tokenPair: TokenPair, numberOfDataPoints: number, minAm
     await delay(3000);
   }
 
+    // sort both lists by amount
+    testPointQuotesList.sort((a, b) => a.amount - b.amount);
+    interpolationResultsList.sort((a, b) => a.amount - b.amount);
+  
+    displayResults(testPointQuotesList, interpolationResultsList, tokenPair, minAmount, numberOfDataPoints, maxAmount);
+}
+
+async function testSoroswap(tokenPair: TokenPair, numberOfDataPoints: number, minAmount: number, maxAmount: number) {
+  const testPointOffsetPercentages = [
+    [2, 3], 
+    [5, 7], 
+    [11, 13], 
+    [17, 19], 
+    [23, 29], 
+    [30, 45],
+    [60, 75],
+    [90, 98]
+  ];
+  
+
+  const testPointQuotesList: QuoteDataPoint[] = [];
+  const interpolationResultsList: { amount: number; interpolatedValue: number; usedDataPoints: QuoteDataPoint[] }[] = [];
+
+  for (let i = 0; i < testPointOffsetPercentages.length; i++) {
+    const testPointOffsetPercentageGroup = testPointOffsetPercentages[i]!;
+    const {
+      testPointQuotes, 
+      interpolationResults,
+    } = await testPointGenerationAndQuotes(
+      tokenPair, 
+      minAmount,
+      maxAmount,
+      numberOfDataPoints,
+      testPointOffsetPercentageGroup, 
+      getSoroswapQuotesForAllPoints,
+      linearInterpolate,
+    );
+    testPointQuotesList.push(...testPointQuotes);
+    interpolationResultsList.push(...interpolationResults);
+    await delay(3000);
+  }
+
 
   // sort both lists by amount
   testPointQuotesList.sort((a, b) => a.amount - b.amount);
@@ -169,10 +211,13 @@ function displayResults(
 async function main() {
     for (const tokenPair of cetusTokenPairs) {
       for (const maxAmount of tokenPair.maxAmounts) {
-        await delay(5000);
+        await delay(3000);
         await testCetus(tokenPair, 6, tokenPair.minAmount, maxAmount);
       }
     }
+
+//     const pools = await getSoroswapPoolsSortedByLiquidity();
+//     console.log(pools);
 }
 
 main();
