@@ -1,8 +1,9 @@
-import { getCetusTokenPairs, getQuotesForAllPoints } from "./cetus.js";
-import { powerLawInterpolate, interpolateMultiple, linearInterpolate } from "./interpolation.js";
+import { getQuotesForAllPoints } from "./cetus.js";
+import { cetusTokenPairs } from "./config.js";
+import { interpolateMultiple, linearInterpolate } from "./interpolation.js";
 import { getSoroswapTokenPairs, getSoroswapQuotesForAllPoints } from "./soroswap.js";
 import type { QuoteDataPoint, TokenPair } from "./types.js";
-import { generatePointsForAnalysis } from "./utils.js";
+import { delay, generateLogarithmicDataPoints, generatePointsForAnalysis } from "./utils.js";
 
 /**
  * Test function to demonstrate the point generation and quote fetching
@@ -12,153 +13,166 @@ async function testPointGenerationAndQuotes(
   minAmount: number,
   maxAmount: number,
   numberOfDataPoints: number,
-  testPointOffsetPercentage: number,
+  testPointOffsetPercentages: number[],
   quoteGetter: (tokenPair: TokenPair, points: number[]) => Promise<QuoteDataPoint[]>,
-  interpolationFunction: (dataPoints: QuoteDataPoint[], testAmount: number) => number
-) {
-  console.log("=== TESTING POINT GENERATION AND QUOTE FETCHING ===");
-  
-  console.log(`Min Amount: ${minAmount.toLocaleString()}`);
-  console.log(`Max Amount: ${maxAmount.toLocaleString()}`);
-  console.log(`Number of Data Points: ${numberOfDataPoints}`);
-  console.log(`Test Point Offset: ${testPointOffsetPercentage}%\n`);
-    
-  // Generate points
-  const pointsResult = generatePointsForAnalysis(minAmount, maxAmount, numberOfDataPoints, testPointOffsetPercentage);
-  
-  console.log("📊 Data Points:");
-  pointsResult.dataPoints.forEach((point, index) => {
-      console.log(`  ${index + 1}: ${point.toLocaleString()}`);
-  });
-  
-  console.log("\n🧪 Test Points:");
-  pointsResult.testPoints.forEach((point, index) => {
-      console.log(`  ${index + 1}: ${point.toLocaleString()}`);
-  });
-  
-  console.log("\n📈 All Points (sorted):");
-  pointsResult.allPoints.forEach((point, index) => {
-      const isDataPoint = pointsResult.dataPoints.includes(point);
-      const isTestPoint = pointsResult.testPoints.includes(point);
-      let type = "";
-      if (isDataPoint && isTestPoint) type = " (Data + Test)";
-      else if (isDataPoint) type = " (Data)";
-      else if (isTestPoint) type = " (Test)";
-      
-      console.log(`  ${index + 1}: ${point.toLocaleString()}${type}`);
-  });
-  
-  console.log(`\n📋 Summary:`);
-  console.log(`  Data Points: ${pointsResult.dataPoints.length}`);
-  console.log(`  Test Points: ${pointsResult.testPoints.length}`);
-  console.log(`  Total Points: ${pointsResult.allPoints.length}`);
-  
-  // Get quotes for all points
-  console.log("\n" + "=".repeat(50));
-  console.log("🔍 GETTING QUOTES FOR ALL POINTS");
-  console.log("=".repeat(50));
-  
-  console.log(`Token Pair: ${tokenPair.tokenA} -> ${tokenPair.tokenB}\n`);
-  
-  const startTime = Date.now();
-  const quoteDataPoints = await quoteGetter(tokenPair, pointsResult.allPoints);
-  const endTime = Date.now();
-  
-  console.log(`\n⏱️  Quote fetching completed in ${(endTime - startTime) / 1000}s`);
-  
-  console.log("\n📊 Quote Results (sorted by amount):");
-  quoteDataPoints.forEach((point, index) => {
-      const rate = point.amountOut / point.amount;
-      console.log(`  ${index + 1}: ${point.amount.toLocaleString()} -> ${point.amountOut.toLocaleString()} (rate: ${rate.toFixed(6)})`);
-  });
-  
-  console.log(`\n✅ Successfully retrieved ${quoteDataPoints.length} quotes`);
-  
-  // Test linear interpolation for test points
-  console.log("\n" + "=".repeat(50));
-  console.log("🧮 TESTING LINEAR INTERPOLATION");
-  console.log("=".repeat(50));
-  
-  // Use only data points for interpolation (NOT test points)
-  const dataPointsOnly = quoteDataPoints.filter(point => 
-      pointsResult.dataPoints.includes(point.amount)
+  interpolationFunction: (dataPoints: QuoteDataPoint[], testAmount: number) => {interpolatedValue: number, usedDataPoints: QuoteDataPoint[]}
+): Promise<{
+  testPointQuotes: QuoteDataPoint[];
+  interpolationResults: { amount: number; interpolatedValue: number, usedDataPoints: QuoteDataPoint[] }[];
+  }> {
+  const {dataPoints, testPoints, allPoints} = generatePointsForAnalysis(minAmount, maxAmount, numberOfDataPoints, testPointOffsetPercentages);
+
+  const allQuotes = await quoteGetter(tokenPair, allPoints);
+
+  const dataPointsQuotes = allQuotes.filter(point => 
+      dataPoints.includes(point.amount)
   );
   
-  console.log(`\n🔧 Interpolation Setup:`);
-  console.log(`  Data points for interpolation: ${dataPointsOnly.length}`);
-  console.log(`  Test points to interpolate: ${pointsResult.testPoints.length}`);
-  console.log(`  Total points available: ${quoteDataPoints.length}`);
-  
-  if (dataPointsOnly.length < 2) {
+  if (dataPointsQuotes.length < 2) {
       console.error("❌ Insufficient data points for interpolation (need at least 2)");
-      return;
+      return {
+        testPointQuotes: [],
+        interpolationResults: [],
+      };
   }
   
-  console.log(`Using ${dataPointsOnly.length} data points for interpolation:`);
-  dataPointsOnly.forEach(point => {
-      console.log(`  ${point.amount.toLocaleString()} -> ${point.amountOut.toLocaleString()}`);
-  });
-  
-  // Validate that we're not using test points as data points
-  const testPointsInData = dataPointsOnly.filter(point => 
-      pointsResult.testPoints.includes(point.amount)
+  const testPointsInData = dataPointsQuotes.filter(point => 
+      testPoints.includes(point.amount)
   );
   
   if (testPointsInData.length > 0) {
       console.error("❌ ERROR: Test points are being used as data points!");
-      console.error("   This will cause circular reference and incorrect interpolation.");
       console.error(`   Found ${testPointsInData.length} test points in data points.`);
-      return;
+      return {
+        testPointQuotes: [],
+        interpolationResults: [],
+      };
+  }
+
+  // Perform interpolation for test points
+  const interpolationResults = interpolateMultiple(dataPointsQuotes, testPoints, interpolationFunction);
+  const testPointQuotes = allQuotes.filter(point => 
+      testPoints.includes(point.amount)
+  );
+
+  return {
+    testPointQuotes,
+    interpolationResults,
   }
   
-  // Perform interpolation for test points
-  const interpolationResults = interpolateMultiple(dataPointsOnly, pointsResult.testPoints, interpolationFunction);
-  
-  console.log("\n📈 Interpolation Results:");
-  interpolationResults.forEach((result, index) => {
-      console.log(`  Test ${index + 1}: ${result.amount.toLocaleString()} -> ${result.interpolatedValue.toLocaleString()}`);
-  });
-  
-  // Summary in tabular form
-  console.log("\n📊 Summary Table:");
-  console.log("  Amount\t\tInterpolated\t\tActual\t\t\tError");
-  console.log("  " + "─".repeat(80));
-  
-  const testPointQuotes = quoteDataPoints.filter(point => 
-      pointsResult.testPoints.includes(point.amount)
-  );
-  
-  interpolationResults.forEach((interpolated, index) => {
-      const actual = testPointQuotes.find(quote => quote.amount === interpolated.amount);
-      if (actual) {
-          const error = Math.abs(interpolated.interpolatedValue - actual.amountOut) / actual.amountOut * 100;
-          console.log(`  ${interpolated.amount.toLocaleString().padEnd(12)}\t${interpolated.interpolatedValue.toLocaleString().padEnd(16)}\t${actual.amountOut.toLocaleString().padEnd(16)}\t${error.toFixed(4)}%`);
-      }
-  });
 }
 
+
+
+async function testCetus(tokenPair: TokenPair, numberOfDataPoints: number, minAmount: number, maxAmount: number) {
+  const testPointOffsetPercentages = [
+    [2, 3], 
+    [5, 7], 
+    [11, 13], 
+    [17, 19], 
+    [23, 29], 
+    [30, 45],
+    [60, 75],
+    [90, 98]
+  ];
+  
+
+  const testPointQuotesList: QuoteDataPoint[] = [];
+  const interpolationResultsList: { amount: number; interpolatedValue: number; usedDataPoints: QuoteDataPoint[] }[] = [];
+
+  for (let i = 0; i < testPointOffsetPercentages.length; i++) {
+    const testPointOffsetPercentageGroup = testPointOffsetPercentages[i]!;
+    const {
+      testPointQuotes, 
+      interpolationResults,
+    } = await testPointGenerationAndQuotes(
+      tokenPair, 
+      minAmount,
+      maxAmount,
+      numberOfDataPoints,
+      testPointOffsetPercentageGroup, 
+      getQuotesForAllPoints,
+      linearInterpolate,
+    );
+    testPointQuotesList.push(...testPointQuotes);
+    interpolationResultsList.push(...interpolationResults);
+    await delay(3000);
+  }
+
+
+  // sort both lists by amount
+  testPointQuotesList.sort((a, b) => a.amount - b.amount);
+  interpolationResultsList.sort((a, b) => a.amount - b.amount);
+
+  displayResults(testPointQuotesList, interpolationResultsList, tokenPair, minAmount, numberOfDataPoints, maxAmount);
+}
+
+function displayResults(
+  testPointQuotes: QuoteDataPoint[], 
+  interpolationResults: { amount: number; interpolatedValue: number; usedDataPoints: QuoteDataPoint[] }[], 
+  tokenPair: TokenPair, 
+  minAmount: number, 
+  numberOfDataPoints: number,
+  maxAmount: number,
+) {
+      // Display summary table
+  console.log("\n" + "=".repeat(120));
+  console.log("📊 SUMMARY TABLE");
+  console.log("=".repeat(120));
+  
+  // Display configuration information
+  console.log("🔧 CONFIGURATION");
+  console.log("─".repeat(120));
+  console.log(`Token Pair: ${tokenPair.tokenA}/${tokenPair.tokenB}`);
+  console.log(`Min Amount: ${minAmount.toLocaleString()}`);
+  console.log(`Max Amount: ${maxAmount.toLocaleString()}`);
+  console.log(`Number of Data Points: ${numberOfDataPoints}`);
+  console.log(`Number of Test Points: ${testPointQuotes.length}`);
+  console.log("─".repeat(120));
+  
+  if (testPointQuotes.length === 0 || interpolationResults.length === 0) {
+    console.log("❌ No test results available for summary");
+    return;
+  }
+  
+  console.log("Test Point\t\tActual Quote\t\tInterpolated Quote\t\tError (%)\t\tUsed Data Points");
+  console.log("─".repeat(120));
+  
+  interpolationResults.forEach((interpolated) => {
+    const actual = testPointQuotes.find(quote => quote.amount === interpolated.amount);
+    if (actual) {
+      const error = Math.abs(interpolated.interpolatedValue - actual.amountOut) / actual.amountOut * 100;
+      const usedPointsStr = interpolated.usedDataPoints.map(p => p.amount.toLocaleString()).join(" & ");
+      console.log(`${interpolated.amount.toLocaleString().padEnd(25)}\t${actual.amountOut.toLocaleString().padEnd(16)}\t${interpolated.interpolatedValue.toLocaleString().padEnd(20)}\t${error.toFixed(4)}%\t\t${usedPointsStr}`);
+    }
+  });
+  
+  // Calculate and display average error
+  const errors: number[] = [];
+  interpolationResults.forEach((interpolated) => {
+    const actual = testPointQuotes.find(quote => quote.amount === interpolated.amount);
+    if (actual) {
+      const error = Math.abs(interpolated.interpolatedValue - actual.amountOut) / actual.amountOut * 100;
+      errors.push(error);
+    }
+  });
+  
+  if (errors.length > 0) {
+    const pointsWithLowError = errors.filter(error => error <= 0.02).length;
+    console.log("─".repeat(120));
+    console.log(`Total Points: ${errors.length}`);
+    console.log(`Points with Error ≤ 0.02%: ${pointsWithLowError}/${errors.length} (${((pointsWithLowError / errors.length) * 100).toFixed(2)}%)`);
+  }
+}
+
+
 async function main() {
-//   const tokenPair = await getCetusTokenPairs();
-//   const minAmount = 867360175282769;
-//   const maxAmount = 1080914096572582;
-
-  const tokenPair = await getSoroswapTokenPairs("soroswap");
-  const minAmount = 10000000*2500;
-  const maxAmount = 10000000*250000;
-
-  const numberOfDataPoints = 12;
-  const testPointOffsetPercentage = 50;
-  await testPointGenerationAndQuotes(
-    tokenPair[0]!, 
-    minAmount,
-    maxAmount, 
-    numberOfDataPoints, 
-    testPointOffsetPercentage, 
-    // getQuotesForAllPoints, 
-    getSoroswapQuotesForAllPoints,
-    // powerLawInterpolate,
-    linearInterpolate,
-  );
+    for (const tokenPair of cetusTokenPairs) {
+      for (const maxAmount of tokenPair.maxAmounts) {
+        await delay(5000);
+        await testCetus(tokenPair, 6, tokenPair.minAmount, maxAmount);
+      }
+    }
 }
 
 main();

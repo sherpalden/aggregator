@@ -1,6 +1,6 @@
 
 import { config } from './config.js';
-import { powerLawInterpolate, interpolateMultiple } from './interpolation.js';
+import {interpolateMultiple } from './interpolation.js';
 import type { QuoteDataPoint } from './types.js';
 import { delay, generatePointsForAnalysis } from './utils.js';
 

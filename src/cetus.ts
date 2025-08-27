@@ -16,13 +16,6 @@ interface CetusQuoteResponse {
     routePlan: any[];
 }
 
-export async function getCetusTokenPairs(): Promise<TokenPair[]> {
-    return [{
-        tokenA: "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI", //  SUI
-        // tokenA: "0x06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS", //  CETUS
-        tokenB: "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC" //   USDC
-    }];
-}
 
 async function getCetusRouter(amount: InstanceType<typeof BN>, from: string, target: string) {
   const client = new AggregatorClient({})
@@ -69,8 +62,6 @@ async function getQuotesForAllPoints(
     tokenPair: TokenPair, 
     allPoints: number[]
 ): Promise<QuoteDataPoint[]> {
-    console.log(`Getting Cetus quotes for ${allPoints.length} points simultaneously...`);
-    
     // Create all quote requests
     const quoteRequests = allPoints.map(amount => ({
         from: tokenPair.tokenA,
@@ -115,8 +106,6 @@ async function getQuotesForAllPoints(
     
     // Sort by amount in ascending order
     const sortedQuoteDataPoints = quoteDataPoints.sort((a, b) => a.amount - b.amount);
-    
-    console.log(`Successfully got Cetus quotes for ${sortedQuoteDataPoints.length}/${allPoints.length} points`);
     
     return sortedQuoteDataPoints;
 }
